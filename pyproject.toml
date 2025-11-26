@@ -1,0 +1,23 @@
+[project]
+name = "todos"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "granian[reload,uvloop]>=2.5.7",
+    "litestar[openapi,standard]>=2.18.0",
+    "pydantic>=2.12.4",
+    "python-dotenv>=1.2.1",
+    "redis>=7.0.1",
+]
+
+[tool.ruff]
+line-length = 100
+
+[dependency-groups]
+dev = [
+    "debugpy>=1.8.17",
+    "pytest>=8.0.0",
+    "httpx>=0.25.0",
+]
