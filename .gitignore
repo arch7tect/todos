@@ -8,3 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+.zed
+.env
+AGENTS.md
+.DS_Store
+cookies.txt
