@@ -10,6 +10,16 @@ wheels/
 .venv
 .zed
 .env
+
+# Development files
 AGENTS.md
-.DS_Store
+CLAUDE.md
+opencode.json
 cookies.txt
+
+# OS files
+.DS_Store
+
+# Logs
+*.log
+server.log
