@@ -62,6 +62,7 @@ class TodoCreate(Struct):
 
     title: str
     done: bool = False
+    tags: list[str] = []
 
 
 class TodoUpdate(Struct):
@@ -69,6 +70,7 @@ class TodoUpdate(Struct):
 
     title: str
     done: bool = False
+    tags: list[str] = []
 
 
 class TagCreate(Struct):
@@ -319,8 +321,11 @@ async def list_todos_handler() -> list[TodoOut]:
 @post("/todos", status_code=HTTP_201_CREATED)
 async def create_todo_handler(data: TodoCreate) -> TodoOut:
     """Create a new todo."""
-    todo = Todo(id=str(uuid4()), title=data.title, done=data.done)
+    todo = Todo(id=str(uuid4()), title=data.title, done=data.done, tags=data.tags)
     await save_todo(todo)
+    # Save tags to Redis
+    for tag in data.tags:
+        await add_tag_to_todo(todo.id, tag)
     return todo.to_out()
 
 
@@ -337,8 +342,24 @@ async def update_todo_handler(todo_id: str, data: TodoUpdate) -> TodoOut | Respo
     todo = await get_todo(todo_id)
     if not todo:
         return Response(content=None, status_code=HTTP_404_NOT_FOUND)
+
+    # Update basic fields
     todo.title = data.title
     todo.done = data.done
+
+    # Update tags if changed
+    current_tags = set(todo.tags)
+    new_tags = set(data.tags)
+
+    # Remove old tags
+    for tag in current_tags - new_tags:
+        await remove_tag_from_todo(todo_id, tag)
+
+    # Add new tags
+    for tag in new_tags - current_tags:
+        await add_tag_to_todo(todo_id, tag)
+
+    todo.tags = data.tags
     await save_todo(todo)
     return todo.to_out()
 
