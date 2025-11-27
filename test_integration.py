@@ -5,8 +5,8 @@ These tests require the API server to be running on localhost:8000.
 Run the tests with: uv run pytest test_integration.py -v
 """
 
-import pytest
 import httpx
+import pytest
 
 
 class TestTodoAPI:
@@ -25,7 +25,7 @@ class TestTodoAPI:
         # Login to get a session
         response = client.post("/login", json={"name": "testuser"})
         assert response.status_code == 201  # Login returns 201 Created
-        assert response.json() == {"logged_in_as": "testuser"}
+        assert response.json() == {"name": "testuser"}
         return client
 
     def test_health_check(self, client):
@@ -38,25 +38,25 @@ class TestTodoAPI:
         """Test /me endpoint when not logged in."""
         response = client.get("/me")
         assert response.status_code == 200
-        assert response.json() == {"user": None}
+        assert response.json() == {"name": ""}
 
     def test_login_endpoint(self, client):
         """Test the login endpoint."""
         response = client.post("/login", json={"name": "integrationtest"})
         assert response.status_code == 201  # Login returns 201 Created
-        assert response.json() == {"logged_in_as": "integrationtest"}
+        assert response.json() == {"name": "integrationtest"}
 
     def test_me_endpoint_with_session(self, authenticated_client):
         """Test /me endpoint when logged in."""
         response = authenticated_client.get("/me")
         assert response.status_code == 200
-        assert response.json() == {"user": "testuser"}
+        assert response.json() == {"name": "testuser"}
 
     def test_logout_endpoint(self, authenticated_client):
         """Test the logout endpoint."""
         # First verify we're logged in
         response = authenticated_client.get("/me")
-        assert response.json() == {"user": "testuser"}
+        assert response.json() == {"name": "testuser"}
 
         # Logout
         response = authenticated_client.delete("/logout")
@@ -64,7 +64,7 @@ class TestTodoAPI:
 
         # Verify we're logged out
         response = authenticated_client.get("/me")
-        assert response.json() == {"user": None}
+        assert response.json() == {"name": ""}
 
     def test_list_todos_empty(self, authenticated_client):
         """Test listing todos when there are none."""
@@ -163,41 +163,61 @@ class TestTodoAPI:
         get_response = authenticated_client.get(f"/todos/{todo_id}")
         assert get_response.status_code == 404
 
-    def test_full_crud_workflow(self, authenticated_client):
-        """Test a complete CRUD workflow."""
-        # Create
-        todo_data = {"title": "CRUD workflow test", "done": False}
-        create_response = authenticated_client.post("/todos", json=todo_data)
-        assert create_response.status_code == 201
-        todo = create_response.json()
+    def test_tag_flow(self, authenticated_client):
+        """Test adding tags to a todo and fetching by tag."""
+        # Create a todo
+        todo_data = {"title": "Tag test todo", "done": False}
+        create_resp = authenticated_client.post("/todos", json=todo_data)
+        assert create_resp.status_code == 201
+        todo = create_resp.json()
         todo_id = todo["id"]
 
-        # Read (list)
-        list_response = authenticated_client.get("/todos")
-        assert create_response.status_code == 201
-        todos = list_response.json()
-        assert any(t["id"] == todo_id for t in todos)
+        # Initially, todo should have empty tags list
+        assert "tags" in todo
+        assert todo["tags"] == []
 
-        # Read (by ID)
-        get_response = authenticated_client.get(f"/todos/{todo_id}")
-        assert get_response.status_code == 200
-        assert get_response.json() == todo
+        # Add a tag
+        tag_resp = authenticated_client.post(f"/todos/{todo_id}/tags", json={"tag": "urgent"})
+        assert tag_resp.status_code == 201
 
-        # Update
-        update_data = {"title": "Updated CRUD test", "done": True}
-        update_response = authenticated_client.put(f"/todos/{todo_id}", json=update_data)
-        assert update_response.status_code == 200
-        updated_todo = update_response.json()
-        assert updated_todo["title"] == "Updated CRUD test"
-        assert updated_todo["done"] is True
+        # Get todo by ID - should now include tags
+        get_resp = authenticated_client.get(f"/todos/{todo_id}")
+        assert get_resp.status_code == 200
+        todo_with_tags = get_resp.json()
+        assert "tags" in todo_with_tags
+        assert "urgent" in todo_with_tags["tags"]
 
-        # Delete
-        delete_response = authenticated_client.delete(f"/todos/{todo_id}")
-        assert delete_response.status_code == 204
+        # Retrieve tags for todo (legacy endpoint still works)
+        tags_resp = authenticated_client.get(f"/todos/{todo_id}/tags")
+        assert tags_resp.status_code == 200
+        assert "urgent" in tags_resp.json()
 
-        # Verify deletion
-        get_after_delete = authenticated_client.get(f"/todos/{todo_id}")
-        assert get_after_delete.status_code == 404
+        # Add another tag
+        tag_resp2 = authenticated_client.post(f"/todos/{todo_id}/tags", json={"tag": "work"})
+        assert tag_resp2.status_code == 201
+
+        # List all todos - should include tags
+        list_resp = authenticated_client.get("/todos")
+        assert list_resp.status_code == 200
+        todos = list_resp.json()
+        found_todo = next((t for t in todos if t["id"] == todo_id), None)
+        assert found_todo is not None
+        assert "tags" in found_todo
+        assert "urgent" in found_todo["tags"]
+        assert "work" in found_todo["tags"]
+
+        # Retrieve todos by tag - should include all tags
+        by_tag_resp = authenticated_client.get("/tags/urgent/todos")
+        assert by_tag_resp.status_code == 200
+        tagged_todos = by_tag_resp.json()
+        found = next((t for t in tagged_todos if t["id"] == todo_id), None)
+        assert found is not None
+        assert "tags" in found
+        assert "urgent" in found["tags"]
+        assert "work" in found["tags"]
+
+        # Clean up
+        authenticated_client.delete(f"/todos/{todo_id}")
 
 
 if __name__ == "__main__":
