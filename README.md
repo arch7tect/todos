@@ -52,6 +52,8 @@ API available at: http://localhost:8000
 Interactive documentation:
 - **Swagger UI**: http://localhost:8000/schema
 - **ReDoc**: http://localhost:8000/schema/redoc
+- **Stoplight Elements**: http://localhost:8000/schema/elements
+- **RapiDoc**: http://localhost:8000/schema/rapidoc
 - **OpenAPI JSON**: http://localhost:8000/schema/openapi.json
 
 ## API Endpoints
