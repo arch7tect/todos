@@ -117,13 +117,13 @@ class Todo(Struct):
         return f"{REDIS_NAMESPACE}index"
 
     def dumps(self) -> bytes:
-        """Serialize to msgspec binary format for Redis storage."""
-        return msgspec.msgpack.encode(self)
+        """Serialize to msgspec JSON for Redis storage."""
+        return msgspec.json.encode(self)
 
     @staticmethod
     def loads(data: bytes) -> "Todo":
-        """Deserialize from msgspec binary format."""
-        return msgspec.msgpack.decode(data, type=Todo)
+        """Deserialize from msgspec JSON."""
+        return msgspec.json.decode(data, type=Todo)
 
     def to_out(self) -> TodoOut:
         """Convert to API output model."""
