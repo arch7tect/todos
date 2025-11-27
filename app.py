@@ -4,7 +4,7 @@ import os
 from typing import Any
 from uuid import uuid4
 
-import msgpack
+import msgspec
 from dotenv import load_dotenv
 from litestar import Litestar, delete, get, post, put
 from litestar.middleware.session.server_side import ServerSideSessionConfig
@@ -23,7 +23,7 @@ from litestar.status_codes import (
     HTTP_404_NOT_FOUND,
 )
 from litestar.stores.redis import RedisStore
-from pydantic import BaseModel, Field
+from msgspec import Struct
 from redis import asyncio as aioredis  # redis>=5
 
 # --- env / redis config ---
@@ -57,58 +57,56 @@ session_mw = ServerSideSessionConfig(
 
 
 # Input Models (what clients send to API)
-class TodoCreate(BaseModel):
+class TodoCreate(Struct):
     """Request body for creating a new todo."""
 
-    title: str = Field(min_length=1, max_length=200, description="Todo title")
-    done: bool = Field(default=False, description="Completion status")
+    title: str
+    done: bool = False
 
 
-class TodoUpdate(BaseModel):
+class TodoUpdate(Struct):
     """Request body for updating an existing todo."""
 
-    title: str = Field(min_length=1, max_length=200, description="Todo title")
-    done: bool = Field(default=False, description="Completion status")
+    title: str
+    done: bool = False
 
 
-class TagCreate(BaseModel):
+class TagCreate(Struct):
     """Request body for adding a tag to a todo."""
 
-    tag: str = Field(min_length=1, max_length=50, description="Tag name")
+    tag: str
 
 
-class LoginRequest(BaseModel):
+class LoginRequest(Struct):
     """Request body for user login."""
 
-    name: str = Field(description="Username")
+    name: str
 
 
 # Output Models (what API returns to clients)
-class TodoOut(BaseModel):
+class TodoOut(Struct):
     """Todo response returned by API endpoints."""
 
-    id: str = Field(description="Unique todo identifier")
-    title: str = Field(description="Todo title")
-    done: bool = Field(description="Completion status")
-    tags: list[str] = Field(default_factory=list, description="Associated tags")
-
-    model_config = {"from_attributes": True}
+    id: str
+    title: str
+    done: bool
+    tags: list[str] = []
 
 
-class UserOut(BaseModel):
+class UserOut(Struct):
     """User information response."""
 
-    name: str = Field(description="Username")
+    name: str
 
 
 # Domain Model (internal representation with storage methods)
-class Todo(BaseModel):
+class Todo(Struct):
     """Internal todo model with persistence logic."""
 
     id: str
     title: str
     done: bool = False
-    tags: list[str] = Field(default_factory=list)
+    tags: list[str] = []
 
     @staticmethod
     def key(todo_id: str) -> str:
@@ -119,13 +117,13 @@ class Todo(BaseModel):
         return f"{REDIS_NAMESPACE}index"
 
     def dumps(self) -> bytes:
-        """Serialize to MessagePack binary format for Redis storage."""
-        return msgpack.packb(self.model_dump(), use_bin_type=True)
+        """Serialize to msgspec binary format for Redis storage."""
+        return msgspec.msgpack.encode(self)
 
     @staticmethod
     def loads(data: bytes) -> "Todo":
-        """Deserialize from MessagePack binary format."""
-        return Todo.model_validate(msgpack.unpackb(data, raw=False))
+        """Deserialize from msgspec binary format."""
+        return msgspec.msgpack.decode(data, type=Todo)
 
     def to_out(self) -> TodoOut:
         """Convert to API output model."""
