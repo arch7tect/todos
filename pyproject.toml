@@ -7,7 +7,8 @@ requires-python = ">=3.11"
 dependencies = [
     "granian[reload,uvloop]>=2.5.7",
     "litestar[openapi,standard]>=2.18.0",
-    "msgspec>=0.19.0",
+    "locust>=2.42.5",
+    "msgpack>=1.1.2",
     "orjson>=3.11.4",
     "pydantic>=2.12.4",
     "python-dotenv>=1.2.1",
