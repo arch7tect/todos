@@ -1,22 +1,6 @@
 # Todos API
 
-High-performance async REST API for managing todos with tags. Built with Python, Litestar, and Redis.
-
-## Performance Highlights
-
-- **9.5x faster JSON** serialization with orjson
-- **2-5x faster storage** with MessagePack binary format
-- **50% fewer API calls** with embedded tag responses
-
-## Features
-
-- Full CRUD operations for todos with tags
-- Tag system with many-to-many relationships
-- Embedded responses (tags included in todo objects)
-- Session-based authentication
-- Type-safe API with Pydantic v2 validation
-- Professional OpenAPI documentation
-- Comprehensive test suite (13 integration tests)
+Async REST API for managing todos with tags. Built with Python, Litestar, and Redis.
 
 ## Tech Stack
 
