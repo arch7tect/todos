@@ -169,9 +169,6 @@ REDIS_NAMESPACE=todos:
 - JSON text: 114 bytes
 - MessagePack: 89 bytes (22% smaller)
 
-**API Calls:**
-- Single call with embedded tags (50% reduction)
-
 ## Project Structure
 
 ```
