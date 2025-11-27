@@ -170,8 +170,7 @@ REDIS_NAMESPACE=todos:
 - MessagePack: 89 bytes (22% smaller)
 
 **API Calls:**
-- Before: 2 calls (GET todo + GET tags)
-- After: 1 call (50% reduction)
+- Single call with embedded tags (50% reduction)
 
 ## Project Structure
 
