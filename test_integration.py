@@ -219,6 +219,41 @@ class TestTodoAPI:
         # Clean up
         authenticated_client.delete(f"/todos/{todo_id}")
 
+    def test_todo_json_round_trip(self, authenticated_client):
+        """Ensure todos persist and return JSON-friendly types (no bytes) after round trips."""
+        # Create a todo and add tags
+        todo_data = {"title": "JSON round trip", "done": False}
+        create_resp = authenticated_client.post("/todos", json=todo_data)
+        assert create_resp.status_code == 201
+        todo_id = create_resp.json()["id"]
+
+        authenticated_client.post(f"/todos/{todo_id}/tags", json={"tag": "alpha"})
+        authenticated_client.post(f"/todos/{todo_id}/tags", json={"tag": "beta"})
+
+        # Fetch by ID and ensure fields are proper JSON types
+        get_resp = authenticated_client.get(f"/todos/{todo_id}")
+        assert get_resp.status_code == 200
+        todo = get_resp.json()
+        assert isinstance(todo["id"], str)
+        assert isinstance(todo["title"], str)
+        assert isinstance(todo["done"], bool)
+        assert all(isinstance(tag, str) for tag in todo.get("tags", []))
+        assert set(todo["tags"]) == {"alpha", "beta"}
+
+        # List todos and confirm same constraints hold
+        list_resp = authenticated_client.get("/todos")
+        assert list_resp.status_code == 200
+        todos = list_resp.json()
+        listed = next(t for t in todos if t["id"] == todo_id)
+        assert isinstance(listed["id"], str)
+        assert isinstance(listed["title"], str)
+        assert isinstance(listed["done"], bool)
+        assert all(isinstance(tag, str) for tag in listed.get("tags", []))
+        assert set(listed["tags"]) == {"alpha", "beta"}
+
+        # Clean up
+        authenticated_client.delete(f"/todos/{todo_id}")
+
 
 if __name__ == "__main__":
     # Run tests if executed directly

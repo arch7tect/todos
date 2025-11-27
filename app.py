@@ -4,7 +4,6 @@ import os
 from typing import Any
 from uuid import uuid4
 
-import msgpack
 from dotenv import load_dotenv
 from litestar import Litestar, delete, get, post, put
 from litestar.middleware.session.server_side import ServerSideSessionConfig
@@ -36,8 +35,8 @@ REDIS_NAMESPACE = os.getenv("REDIS_NAMESPACE", "todos:")
 # debugpy.listen(("0.0.0.0", 5678))
 # print("🐛 Debugger listening on port 5678...")
 
-# Async Redis client for app data (binary mode for msgpack)
-redis = aioredis.from_url(REDIS_URL, decode_responses=False)
+# Async Redis client for app data (store JSON strings)
+redis = aioredis.from_url(REDIS_URL, decode_responses=True)
 
 # Store for server-side sessions
 session_store = RedisStore.with_client(namespace="sess:")
@@ -118,14 +117,14 @@ class Todo(BaseModel):
     def index_key() -> str:
         return f"{REDIS_NAMESPACE}index"
 
-    def dumps(self) -> bytes:
-        """Serialize to MessagePack binary format for Redis storage."""
-        return msgpack.packb(self.model_dump(), use_bin_type=True)
+    def dumps(self) -> str:
+        """Serialize to JSON string for Redis storage using Pydantic's fast encoder."""
+        return self.model_dump_json()
 
     @staticmethod
-    def loads(data: bytes) -> "Todo":
-        """Deserialize from MessagePack binary format."""
-        return Todo.model_validate(msgpack.unpackb(data, raw=False))
+    def loads(data: str | bytes) -> "Todo":
+        """Deserialize from JSON string using Pydantic's fast decoder."""
+        return Todo.model_validate_json(data)
 
     def to_out(self) -> TodoOut:
         """Convert to API output model."""
