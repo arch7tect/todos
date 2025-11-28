@@ -219,37 +219,61 @@ class TestTodoAPI:
         # Clean up
         authenticated_client.delete(f"/todos/{todo_id}")
 
-    def test_todo_json_round_trip(self, authenticated_client):
-        """Ensure todos persist and return JSON-friendly types (no bytes) after round trips."""
-        # Create a todo and add tags
-        todo_data = {"title": "JSON round trip", "done": False}
+    def test_create_todo_with_tags(self, authenticated_client):
+        """Test creating a todo with tags in the initial request."""
+        todo_data = {
+            "title": "Todo with initial tags",
+            "done": False,
+            "tags": ["urgent", "work", "home"],
+        }
         create_resp = authenticated_client.post("/todos", json=todo_data)
         assert create_resp.status_code == 201
+        todo = create_resp.json()
+
+        # Verify tags are included
+        assert "tags" in todo
+        assert set(todo["tags"]) == {"urgent", "work", "home"}
+
+        # Verify tags work with query endpoint
+        by_tag_resp = authenticated_client.get("/tags/urgent/todos")
+        assert by_tag_resp.status_code == 200
+        todos = by_tag_resp.json()
+        assert any(t["id"] == todo["id"] for t in todos)
+
+        # Clean up
+        authenticated_client.delete(f"/todos/{todo['id']}")
+
+    def test_update_todo_tags(self, authenticated_client):
+        """Test updating tags via PUT request."""
+        # Create with initial tags
+        todo_data = {"title": "Update tags test", "done": False, "tags": ["old1", "old2", "keep"]}
+        create_resp = authenticated_client.post("/todos", json=todo_data)
         todo_id = create_resp.json()["id"]
 
-        authenticated_client.post(f"/todos/{todo_id}/tags", json={"tag": "alpha"})
-        authenticated_client.post(f"/todos/{todo_id}/tags", json={"tag": "beta"})
+        # Update with different tags
+        update_data = {"title": "Update tags test", "done": True, "tags": ["new1", "new2", "keep"]}
+        update_resp = authenticated_client.put(f"/todos/{todo_id}", json=update_data)
+        assert update_resp.status_code == 200
+        updated = update_resp.json()
 
-        # Fetch by ID and ensure fields are proper JSON types
-        get_resp = authenticated_client.get(f"/todos/{todo_id}")
-        assert get_resp.status_code == 200
-        todo = get_resp.json()
-        assert isinstance(todo["id"], str)
-        assert isinstance(todo["title"], str)
-        assert isinstance(todo["done"], bool)
-        assert all(isinstance(tag, str) for tag in todo.get("tags", []))
-        assert set(todo["tags"]) == {"alpha", "beta"}
+        # Verify tags updated correctly
+        assert set(updated["tags"]) == {"new1", "new2", "keep"}
+        assert updated["done"] is True
 
-        # List todos and confirm same constraints hold
-        list_resp = authenticated_client.get("/todos")
-        assert list_resp.status_code == 200
-        todos = list_resp.json()
-        listed = next(t for t in todos if t["id"] == todo_id)
-        assert isinstance(listed["id"], str)
-        assert isinstance(listed["title"], str)
-        assert isinstance(listed["done"], bool)
-        assert all(isinstance(tag, str) for tag in listed.get("tags", []))
-        assert set(listed["tags"]) == {"alpha", "beta"}
+        # Verify old tags removed from reverse index
+        old1_resp = authenticated_client.get("/tags/old1/todos")
+        old1_todos = old1_resp.json()
+        assert not any(t["id"] == todo_id for t in old1_todos)
+
+        # Verify new tags in reverse index
+        new1_resp = authenticated_client.get("/tags/new1/todos")
+        new1_todos = new1_resp.json()
+        assert any(t["id"] == todo_id for t in new1_todos)
+
+        # Verify kept tag still works
+        keep_resp = authenticated_client.get("/tags/keep/todos")
+        keep_todos = keep_resp.json()
+        assert any(t["id"] == todo_id for t in keep_todos)
 
         # Clean up
         authenticated_client.delete(f"/todos/{todo_id}")

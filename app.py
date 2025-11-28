@@ -4,6 +4,7 @@ import os
 from typing import Any
 from uuid import uuid4
 
+import msgspec
 from dotenv import load_dotenv
 from litestar import Litestar, delete, get, post, put
 from litestar.middleware.session.server_side import ServerSideSessionConfig
@@ -22,7 +23,7 @@ from litestar.status_codes import (
     HTTP_404_NOT_FOUND,
 )
 from litestar.stores.redis import RedisStore
-from pydantic import BaseModel, Field
+from msgspec import Struct
 from redis import asyncio as aioredis  # redis>=5
 
 # --- env / redis config ---
@@ -35,8 +36,8 @@ REDIS_NAMESPACE = os.getenv("REDIS_NAMESPACE", "todos:")
 # debugpy.listen(("0.0.0.0", 5678))
 # print("🐛 Debugger listening on port 5678...")
 
-# Async Redis client for app data (store JSON strings)
-redis = aioredis.from_url(REDIS_URL, decode_responses=True)
+# Async Redis client for app data (binary mode for msgpack)
+redis = aioredis.from_url(REDIS_URL, decode_responses=False)
 
 # Store for server-side sessions
 session_store = RedisStore.with_client(namespace="sess:")
@@ -56,58 +57,58 @@ session_mw = ServerSideSessionConfig(
 
 
 # Input Models (what clients send to API)
-class TodoCreate(BaseModel):
+class TodoCreate(Struct):
     """Request body for creating a new todo."""
 
-    title: str = Field(min_length=1, max_length=200, description="Todo title")
-    done: bool = Field(default=False, description="Completion status")
+    title: str
+    done: bool = False
+    tags: list[str] = []
 
 
-class TodoUpdate(BaseModel):
+class TodoUpdate(Struct):
     """Request body for updating an existing todo."""
 
-    title: str = Field(min_length=1, max_length=200, description="Todo title")
-    done: bool = Field(default=False, description="Completion status")
+    title: str
+    done: bool = False
+    tags: list[str] = []
 
 
-class TagCreate(BaseModel):
+class TagCreate(Struct):
     """Request body for adding a tag to a todo."""
 
-    tag: str = Field(min_length=1, max_length=50, description="Tag name")
+    tag: str
 
 
-class LoginRequest(BaseModel):
+class LoginRequest(Struct):
     """Request body for user login."""
 
-    name: str = Field(description="Username")
+    name: str
 
 
 # Output Models (what API returns to clients)
-class TodoOut(BaseModel):
+class TodoOut(Struct):
     """Todo response returned by API endpoints."""
 
-    id: str = Field(description="Unique todo identifier")
-    title: str = Field(description="Todo title")
-    done: bool = Field(description="Completion status")
-    tags: list[str] = Field(default_factory=list, description="Associated tags")
-
-    model_config = {"from_attributes": True}
+    id: str
+    title: str
+    done: bool
+    tags: list[str] = []
 
 
-class UserOut(BaseModel):
+class UserOut(Struct):
     """User information response."""
 
-    name: str = Field(description="Username")
+    name: str
 
 
 # Domain Model (internal representation with storage methods)
-class Todo(BaseModel):
+class Todo(Struct):
     """Internal todo model with persistence logic."""
 
     id: str
     title: str
     done: bool = False
-    tags: list[str] = Field(default_factory=list)
+    tags: list[str] = []
 
     @staticmethod
     def key(todo_id: str) -> str:
@@ -117,14 +118,14 @@ class Todo(BaseModel):
     def index_key() -> str:
         return f"{REDIS_NAMESPACE}index"
 
-    def dumps(self) -> str:
-        """Serialize to JSON string for Redis storage using Pydantic's fast encoder."""
-        return self.model_dump_json()
+    def dumps(self) -> bytes:
+        """Serialize to msgspec JSON for Redis storage."""
+        return msgspec.json.encode(self)
 
     @staticmethod
-    def loads(data: str | bytes) -> "Todo":
-        """Deserialize from JSON string using Pydantic's fast decoder."""
-        return Todo.model_validate_json(data)
+    def loads(data: bytes) -> "Todo":
+        """Deserialize from msgspec JSON."""
+        return msgspec.json.decode(data, type=Todo)
 
     def to_out(self) -> TodoOut:
         """Convert to API output model."""
@@ -320,8 +321,11 @@ async def list_todos_handler() -> list[TodoOut]:
 @post("/todos", status_code=HTTP_201_CREATED)
 async def create_todo_handler(data: TodoCreate) -> TodoOut:
     """Create a new todo."""
-    todo = Todo(id=str(uuid4()), title=data.title, done=data.done)
+    todo = Todo(id=str(uuid4()), title=data.title, done=data.done, tags=data.tags)
     await save_todo(todo)
+    # Save tags to Redis
+    for tag in data.tags:
+        await add_tag_to_todo(todo.id, tag)
     return todo.to_out()
 
 
@@ -338,8 +342,24 @@ async def update_todo_handler(todo_id: str, data: TodoUpdate) -> TodoOut | Respo
     todo = await get_todo(todo_id)
     if not todo:
         return Response(content=None, status_code=HTTP_404_NOT_FOUND)
+
+    # Update basic fields
     todo.title = data.title
     todo.done = data.done
+
+    # Update tags if changed
+    current_tags = set(todo.tags)
+    new_tags = set(data.tags)
+
+    # Remove old tags
+    for tag in current_tags - new_tags:
+        await remove_tag_from_todo(todo_id, tag)
+
+    # Add new tags
+    for tag in new_tags - current_tags:
+        await add_tag_to_todo(todo_id, tag)
+
+    todo.tags = data.tags
     await save_todo(todo)
     return todo.to_out()
 
