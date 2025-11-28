@@ -5,14 +5,13 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "granian[reload,uvloop]>=2.5.7",
-    "litestar[openapi,standard]>=2.18.0",
-    "locust>=2.42.5",
+    "granian[reload,uvloop]>=2.6.0",
+    "litestar[standard]>=2.18.0",
     "msgpack>=1.1.2",
     "orjson>=3.11.4",
-    "pydantic>=2.12.4",
+    "pydantic>=2.12.5",
     "python-dotenv>=1.2.1",
-    "redis>=7.0.1",
+    "redis>=7.1.0",
 ]
 
 [tool.ruff]
@@ -21,6 +20,6 @@ line-length = 100
 [dependency-groups]
 dev = [
     "debugpy>=1.8.17",
-    "pytest>=8.0.0",
-    "httpx>=0.25.0",
+    "pytest>=9.0.1",
+    "httpx>=0.28.1",
 ]
